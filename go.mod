@@ -59,5 +59,3 @@ require (
 	google.golang.org/grpc v1.72.1 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
-
-replace github.com/joeldsouza28/terraform-provider-reddit/internal/provider => ./internal/provider
