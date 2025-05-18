@@ -5,7 +5,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
 	// "fmt"
 
-	"github.com/joeldsouza28/terraform-reddit-provider/internal/provider"
+	"github.com/joeldsouza28/terraform-provider-reddit/internal/provider"
 )
 
 var (
