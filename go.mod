@@ -60,4 +60,4 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 )
 
-replace github.com/joeldsouza28/terraform-reddit-provider/internal/provider => ./internal/provider
+replace github.com/joeldsouza28/terraform-provider-reddit/internal/provider => ./internal/provider
