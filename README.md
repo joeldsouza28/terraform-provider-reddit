@@ -1,5 +1,5 @@
 
-# Reddit Terraform Provider
+# <img src="https://raw.githubusercontent.com/joeldsouza28/terraform-provider-reddit/61657acd37cc130a849773ffe361f311a4be4c8b/reddit.png" width=30 height=30/> Reddit Terraform Provider
 
 ![Terraform](https://img.shields.io/badge/Terraform-Provider-blue?logo=terraform)
 ![Go](https://img.shields.io/badge/Built%20with-Go-00ADD8?logo=go)
