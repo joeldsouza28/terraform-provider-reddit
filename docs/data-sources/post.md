@@ -21,7 +21,6 @@ description: |-
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
-- `subreddit` (String)
-- `text` (String)
-- `title` (String)
+- `subreddit` (String) The subreddit of your post
+- `text` (String) The text content of your post
+- `title` (String) The title of your post

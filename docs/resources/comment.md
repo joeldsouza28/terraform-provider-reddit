@@ -39,13 +39,12 @@ variable "comment" {
 
 ### Required
 
-- `post_id` (String)
+- `post_id` (String) The post id under which comment is to be added
 
 ### Optional
 
-- `comment` (String)
+- `comment` (String) The comment text
 
 ### Read-Only
 
 - `comment_id` (String)
-- `id` (String) The ID of this resource.

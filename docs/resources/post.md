@@ -49,11 +49,10 @@ variable "text" {
 
 ### Optional
 
-- `flair` (String)
-- `nsfw` (Boolean)
-- `text` (String)
+- `flair` (String) Flair is optional but may be required for some subreddits
+- `nsfw` (Boolean) Post can be marked nsfw with true being nsfw and false being non nsfsw
+- `text` (String) The text of your post 
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
-- `post_id` (String)
+- `post_id` (String) The ID of this resource.
