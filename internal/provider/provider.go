@@ -35,6 +35,9 @@ func Provider() *schema.Provider {
 			"reddit_post":    resourcePost(),
 			"reddit_comment": resourceComment(),
 		},
+		DataSourcesMap: map[string]*schema.Resource{
+			"reddit_post": dataSourceRedditPost(),
+		},
 		ConfigureContextFunc: func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
 			config := map[string]string{
 				"client_id":     d.Get("client_id").(string),

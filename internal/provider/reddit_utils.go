@@ -315,3 +315,61 @@ func AddComment(accessToken, parentFullname, text string) (string, error) {
 	return "", nil
 
 }
+
+
+type RedditPost struct {
+	Title     string
+	Text      string
+	Subreddit string
+}
+
+// FetchPostByID fetches a Reddit post by its ID using Reddit's JSON API
+func FetchPostByID(token, postID string) (*RedditPost, error) {
+	// Ensure postID is in the correct format
+	if !strings.HasPrefix(postID, "t3_") {
+		postID = "t3_" + postID
+	}
+	url := fmt.Sprintf("https://oauth.reddit.com/api/info.json?id=%s", postID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "bearer "+token)
+	req.Header.Set("User-Agent", "terraform-provider-reddit/0.1 by your-username")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Data struct {
+			Children []struct {
+				Data struct {
+					Title     string `json:"title"`
+					SelfText  string `json:"selftext"`
+					Subreddit string `json:"subreddit"`
+				} `json:"data"`
+			} `json:"children"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+
+	if len(data.Data.Children) == 0 {
+		return nil, fmt.Errorf("no post found with ID %s", postID)
+	}
+
+	postData := data.Data.Children[0].Data
+
+	return &RedditPost{
+		Title:     postData.Title,
+		Text:      postData.SelfText,
+		Subreddit: postData.Subreddit,
+	}, nil
+}
