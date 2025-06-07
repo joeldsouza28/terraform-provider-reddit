@@ -1,111 +1,135 @@
 package provider
 
 import (
-	"log"
+	"context"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func resourceComment() *schema.Resource {
-	return &schema.Resource{
-		Create: resourceCreateComment,
-		Delete: resourceDeleteComment,
-		Update: resourceUpdateComment,
-		Read:   resourceReadComment,
-		Schema: map[string]*schema.Schema{
-			"post_id": {
-				Type:     schema.TypeString,
+var _ resource.Resource = &commentResource{}
+
+type commentResource struct {
+	client *redditClient
+}
+
+type commentResourceModel struct {
+	PostID    types.String `tfsdk:"post_id"`
+	Comment   types.String `tfsdk:"comment"`
+	CommentID types.String `tfsdk:"comment_id"`
+}
+
+func NewCommentResource() resource.Resource {
+	return &commentResource{}
+}
+
+func (r *commentResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_comment"
+}
+
+func (r *commentResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+	r.client = req.ProviderData.(*redditClient)
+}
+
+func (r *commentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"post_id": schema.StringAttribute{
 				Required: true,
-				ForceNew: true,
-				Optional: false,
 			},
-			"comment": {
-				Type:     schema.TypeString,
-				Required: false,
+			"comment": schema.StringAttribute{
 				Optional: true,
 			},
-			"comment_id": {
-				Type:     schema.TypeString,
+			"comment_id": schema.StringAttribute{
 				Computed: true,
 			},
 		},
 	}
 }
 
-func resourceCreateComment(d *schema.ResourceData, meta interface{}) error {
-	config := meta.(map[string]string)
-	client_id := config["client_id"]
-	client_secret := config["client_secret"]
-	username := config["username"]
-	password := config["password"]
-	text := d.Get("comment").(string)
-	post_id := d.Get("post_id").(string)
-	token, err := GetAccessToken(client_id, client_secret, username, password)
+func (r *commentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data commentResourceModel
+	diags := req.Plan.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	token, err := r.client.GetToken()
 	if err != nil {
-		log.Printf("[ERROR] Something went wrong while getting access token %s", err)
-		return err
+		resp.Diagnostics.AddError("Token Error", err.Error())
+		return
 	}
-	fullname := post_id
-	if !strings.HasPrefix(post_id, "t3_") {
-		fullname = "t3_" + post_id
+
+	fullname := data.PostID.ValueString()
+	if !strings.HasPrefix(fullname, "t3_") {
+		fullname = "t3_" + fullname
 	}
-	comment_id, err := AddComment(token, fullname, text)
+
+	commentID, err := AddComment(token, fullname, data.Comment.ValueString())
 	if err != nil {
-		log.Printf("[ERROR] Something went wrong while adding comment %s", err)
+		resp.Diagnostics.AddError("Add Comment Error", err.Error())
+		return
 	}
-	d.SetId(comment_id)
-	d.Set("comment_id", comment_id)
-	return nil
+
+	data.CommentID = types.StringValue(commentID)
+	resp.State.Set(ctx, &data)
 }
 
-func resourceDeleteComment(d *schema.ResourceData, meta interface{}) error {
-	config := meta.(map[string]string)
-	client_id := config["client_id"]
-	client_secret := config["client_secret"]
-	username := config["username"]
-	password := config["password"]
-	comment_id := d.Get("comment_id").(string)
-	token, err := GetAccessToken(client_id, client_secret, username, password)
-
-	if err != nil {
-		log.Printf("[ERROR] Something went wrong while getting access token %s", err)
-		return err
-	}
-
-	fullname := comment_id
-	if !strings.HasPrefix(comment_id, "t1_") {
-		fullname = "t1_" + comment_id
-	}
-
-	if err := DeletePost(token, fullname); err != nil {
-		log.Printf("[ERROR] Something went wrong while deleting comment %s", err)
-	}
-	return nil
+func (r *commentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// Not implemented (you can implement a fetch API if needed)
 }
-func resourceReadComment(d *schema.ResourceData, meta interface{}) error {
-	return nil
-}
-func resourceUpdateComment(d *schema.ResourceData, meta interface{}) error {
-	config := meta.(map[string]string)
-	client_id := config["client_id"]
-	client_secret := config["client_secret"]
-	username := config["username"]
-	password := config["password"]
-	token, err := GetAccessToken(client_id, client_secret, username, password)
-	newText := d.Get("text").(string)
 
-	comment_id := d.Get("comment_id").(string)
+func (r *commentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data commentResourceModel
+	diags := req.Plan.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
+	token, err := r.client.GetToken()
 	if err != nil {
-		log.Printf("[ERROR] Something went wrong while getting access token %s", err)
-		return err
+		resp.Diagnostics.AddError("Token Error", err.Error())
+		return
 	}
 
-	if err := UpdatePostText(token, comment_id, newText); err != nil {
-		log.Printf("[ERROR] Something went wrong while updating comment %s", err)
-		return err
+	commentID := data.CommentID.ValueString()
+	if err := UpdatePostText(token, commentID, data.Comment.ValueString()); err != nil {
+		resp.Diagnostics.AddError("Update Comment Error", err.Error())
+		return
 	}
 
-	return nil
+	data.CommentID = types.StringValue(commentID)
+	resp.State.Set(ctx, &data)
+}
+
+func (r *commentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state commentResourceModel
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	token, err := r.client.GetToken()
+	if err != nil {
+		resp.Diagnostics.AddError("Token Error", err.Error())
+		return
+	}
+
+	commentID := state.CommentID.ValueString()
+	if !strings.HasPrefix(commentID, "t1_") {
+		commentID = "t1_" + commentID
+	}
+
+	if err := DeletePost(token, commentID); err != nil {
+		resp.Diagnostics.AddError("Delete Comment Error", err.Error())
+		return
+	}
 }

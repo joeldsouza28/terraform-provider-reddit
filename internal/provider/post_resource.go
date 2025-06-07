@@ -1,132 +1,146 @@
 package provider
 
 import (
-	"log"
+	"context"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func resourcePost() *schema.Resource {
-	return &schema.Resource{
-		Create: resourceCreatePost,
-		Read:   resourceReadPost,
-		Delete: resourceDeletePost,
-		Update: resourceUpdatePost,
-		Schema: map[string]*schema.Schema{
-			"title": {
-				Type:     schema.TypeString,
+var _ resource.Resource = &postResource{}
+
+type postResource struct {
+	client *redditClient
+}
+
+type postResourceModel struct {
+	Title     types.String `tfsdk:"title"`
+	Text      types.String `tfsdk:"text"`
+	Subreddit types.String `tfsdk:"subreddit"`
+	PostID    types.String `tfsdk:"post_id"`
+	Flair     types.String `tfsdk:"flair"`
+	NSFW      types.Bool   `tfsdk:"nsfw"`
+}
+
+func NewPostResource() resource.Resource {
+	return &postResource{}
+}
+
+func (r *postResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_post"
+}
+
+func (r *postResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+	r.client = req.ProviderData.(*redditClient)
+}
+
+func (r *postResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"title": schema.StringAttribute{
 				Required: true,
-				ForceNew: true, // title can't be updated on Reddit
+				Computed: false,
 			},
-			"text": {
-				Type:     schema.TypeString,
-				Optional: true, // this allows update!
+			"text": schema.StringAttribute{
+				Optional: true,
 			},
-			"subreddit": {
-				Type:     schema.TypeString,
+			"subreddit": schema.StringAttribute{
 				Required: true,
-				ForceNew: true, // changing subreddit creates a new post
 			},
-			"post_id": {
-				Type:     schema.TypeString,
+			"post_id": schema.StringAttribute{
 				Computed: true,
 			},
-			"flair": {
-				Type:     schema.TypeString,
-				Required: false,
+			"flair": schema.StringAttribute{
 				Optional: true,
 			},
-			"nsfw": {
-				Type:     schema.TypeBool,
-				Required: false,
+			"nsfw": schema.BoolAttribute{
 				Optional: true,
-				Default:  false,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
 			},
 		},
 	}
 }
 
-func resourceCreatePost(d *schema.ResourceData, meta interface{}) error {
-	config := meta.(map[string]string)
-	client_id := config["client_id"]
-	client_secret := config["client_secret"]
-	username := config["username"]
-	password := config["password"]
-	token, err := GetAccessToken(client_id, client_secret, username, password)
-	subreddit := d.Get("subreddit").(string)
-	title := d.Get("title").(string)
-	text := d.Get("text").(string)
-	flair := d.Get("flair").(string)
-	nsfw := d.Get("nsfw").(bool)
-
-	if err != nil {
-		log.Printf("[ERROR] Something went wrong while getting access token %s", err)
-		return err
+func (r *postResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data postResourceModel
+	diags := req.Plan.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
-	postID, err := SubmitPost(token, subreddit, title, text, flair, nsfw)
+	token, err := r.client.GetToken()
 	if err != nil {
-		log.Printf("[ERROR] Something went wrong while creating post %s", err)
-		return err
+		resp.Diagnostics.AddError("Token Error", err.Error())
+		return
 	}
 
-	d.SetId(postID)
-	d.Set("post_id", postID)
-	log.Printf("[INFO] Reddit post created with ID: %s", postID)
+	postID, err := SubmitPost(token, data.Subreddit.ValueString(), data.Title.ValueString(), data.Text.ValueString(), data.Flair.ValueString(), data.NSFW.ValueBool())
+	if err != nil {
+		resp.Diagnostics.AddError("Post Creation Error", err.Error())
+		return
+	}
 
-	return nil
+	data.PostID = types.StringValue(postID)
+	resp.State.Set(ctx, data)
 }
 
-func resourceReadPost(d *schema.ResourceData, meta interface{}) error {
-	return nil
+func (r *postResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	// Not implemented
 }
 
-func resourceDeletePost(d *schema.ResourceData, meta interface{}) error {
+func (r *postResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data postResourceModel
+	diags := req.Plan.Get(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	config := meta.(map[string]string)
-	client_id := config["client_id"]
-	client_secret := config["client_secret"]
-	username := config["username"]
-	password := config["password"]
-	postID := d.Id()
-	fullname := postID
+	token, err := r.client.GetToken()
+	if err != nil {
+		resp.Diagnostics.AddError("Token Error", err.Error())
+		return
+	}
+
+	err = UpdatePostText(token, data.PostID.ValueString(), data.Text.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Update Error", err.Error())
+		return
+	}
+	data.PostID = types.StringValue(data.PostID.String())
+	resp.State.Set(ctx, data)
+}
+
+func (r *postResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state postResourceModel
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	postID := state.PostID.ValueString()
 	if !strings.HasPrefix(postID, "t3_") {
-		fullname = "t3_" + postID
+		postID = "t3_" + postID
 	}
-	token, err := GetAccessToken(client_id, client_secret, username, password)
+
+	token, err := r.client.GetToken()
 	if err != nil {
-		log.Printf("[ERROR] Something went wrong while getting access token %s", err)
-		return err
+		resp.Diagnostics.AddError("Token Error", err.Error())
+		return
 	}
 
-	if err := DeletePost(token, fullname); err != nil {
-		log.Printf("[ERROR] Something went wrong while deleting post %s", err)
-		return err
-	}
-
-	return nil
-}
-
-func resourceUpdatePost(d *schema.ResourceData, meta interface{}) error {
-	config := meta.(map[string]string)
-	client_id := config["client_id"]
-	client_secret := config["client_secret"]
-	username := config["username"]
-	password := config["password"]
-	postID := d.Id()
-	newText := d.Get("text").(string)
-	token, err := GetAccessToken(client_id, client_secret, username, password)
-
+	err = DeletePost(token, postID)
 	if err != nil {
-		log.Printf("[ERROR] Something went wrong while getting access token %s", err)
-		return err
+		resp.Diagnostics.AddError("Delete Error", err.Error())
+		return
 	}
-
-	if err := UpdatePostText(token, postID, newText); err != nil {
-		log.Printf("[ERROR] Something went wrong while updating post %s", err)
-		return err
-	}
-
-	return nil
 }

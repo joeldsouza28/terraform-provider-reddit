@@ -1,10 +1,11 @@
 package main
 
 import (
-	// "github.com/hashicorp/terraform-plugin-framework/provider"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
-	// "fmt"
+	"context"
+	"flag"
+	"log"
 
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/joeldsouza28/terraform-provider-reddit/internal/provider"
 )
 
@@ -18,12 +19,22 @@ var (
 )
 
 func main() {
-	// token, err := provider.GetAccessToken("dLM-rMhSgRqGDeaHB6-GJw", "2UAcsKmg31k7e0wceT6rX7_fD0o2WQ", "Sensitive-Cake-1569", "Frankcastle@9")
-	// if err != nil {
-	// 	fmt.Errorf("failed to get access token: %s", err)
-	// }
-	// provider.SubmitPost(token, "kubernetes", "Hello there", "Hi there")
-	plugin.Serve(&plugin.ServeOpts{
-		ProviderFunc: provider.Provider,
-	})
+	var debug bool
+
+	flag.BoolVar(&debug, "debug", false, "set to true to run the provider with support for debuggers like delve")
+	flag.Parse()
+
+	opts := providerserver.ServeOpts{
+		// TODO: Update this string with the published name of your provider.
+		// Also update the tfplugindocs generate command to either remove the
+		// -provider-name flag or set its value to the updated provider name.
+		Address: "registry.terraform.io/joeldsouza28/reddit",
+		Debug:   debug,
+	}
+
+	err := providerserver.Serve(context.Background(), provider.New(version), opts)
+
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 }
