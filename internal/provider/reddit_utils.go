@@ -12,6 +12,17 @@ import (
 	"strings"
 )
 
+type redditClient struct {
+	ClientID     string
+	ClientSecret string
+	Username     string
+	Password     string
+}
+
+func (r *redditClient) GetToken() (string, error) {
+	return GetAccessToken(r.ClientID, r.ClientSecret, r.Username, r.Password)
+}
+
 func ExtractPostIDFromHTMLJSON(rawJSON []byte) (string, error) {
 	var resp map[string]interface{}
 	if err := json.Unmarshal(rawJSON, &resp); err != nil {
@@ -316,7 +327,6 @@ func AddComment(accessToken, parentFullname, text string) (string, error) {
 
 }
 
-
 type RedditPost struct {
 	Title     string
 	Text      string
@@ -326,6 +336,10 @@ type RedditPost struct {
 // FetchPostByID fetches a Reddit post by its ID using Reddit's JSON API
 func FetchPostByID(token, postID string) (*RedditPost, error) {
 	// Ensure postID is in the correct format
+	postID, err := strconv.Unquote(postID)
+	if err != nil {
+		panic(err)
+	}
 	if !strings.HasPrefix(postID, "t3_") {
 		postID = "t3_" + postID
 	}

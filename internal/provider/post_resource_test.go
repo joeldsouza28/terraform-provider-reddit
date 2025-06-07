@@ -1,40 +1,25 @@
-package provider
+package provider_test
 
 import (
 	"fmt"
 	"os"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/joeldsouza28/terraform-provider-reddit/internal/provider"
 )
 
-var testAccPostProvider = Provider()
-
-var testAccPostProviderFactories = map[string]func() (*schema.Provider, error){
-	"reddit": func() (*schema.Provider, error) {
-		return testAccPostProvider, nil
-	},
-}
-
-func testAccPosPreCheck(t *testing.T) {
-	requiredVars := []string{"REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_USERNAME", "REDDIT_PASSWORD"}
-	for _, v := range requiredVars {
-		if os.Getenv(v) == "" {
-			t.Fatalf("%s must be set for acceptance tests", v)
-		}
-	}
-}
-
-func TestAccRedditPost_basic(t *testing.T) {
+func TestRedditPost_Basic(t *testing.T) {
 	postTitle := "Terraform Test Post"
 	initialText := "Hello from Terraform!"
 	updatedText := "Updated via Terraform!"
-	subreddit := "test" // Or a subreddit where your bot has posting rights
+	subreddit := "test" // Replace with a subreddit where your bot has permission
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:          func() { testAccPosPreCheck(t) },
-		ProviderFactories: testAccPostProviderFactories,
+		PreCheck:                 func() { testPostPreCheck(t) },
+		ProtoV6ProviderFactories: testPostProviderFactories(),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccRedditPostConfig(postTitle, initialText, subreddit),
@@ -54,6 +39,21 @@ func TestAccRedditPost_basic(t *testing.T) {
 	})
 }
 
+func testPostPreCheck(t *testing.T) {
+	required := []string{"REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_USERNAME", "REDDIT_PASSWORD"}
+	for _, v := range required {
+		if os.Getenv(v) == "" {
+			t.Fatalf("Environment variable %s must be set for acceptance tests", v)
+		}
+	}
+}
+
+func testPostProviderFactories() map[string]func() (tfprotov6.ProviderServer, error) {
+	return map[string]func() (tfprotov6.ProviderServer, error){
+		"reddit": providerserver.NewProtocol6WithError(provider.New("test")()),
+	}
+}
+
 func testAccRedditPostConfig(title, text, subreddit string) string {
 	return fmt.Sprintf(`
 provider "reddit" {
@@ -68,7 +68,8 @@ resource "reddit_post" "test" {
   title     = "%s"
   text      = "%s"
 }
-`, os.Getenv("REDDIT_CLIENT_ID"),
+`,
+		os.Getenv("REDDIT_CLIENT_ID"),
 		os.Getenv("REDDIT_CLIENT_SECRET"),
 		os.Getenv("REDDIT_USERNAME"),
 		os.Getenv("REDDIT_PASSWORD"),
